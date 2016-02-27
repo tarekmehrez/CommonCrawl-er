@@ -1,138 +1,115 @@
 import requests
-import argparse
-import time
 import json
 import StringIO
 import gzip
-import csv
-import codecs
 import html2text
 import collections
 import os
 import sys
 import logging
+import re
 
 reload(sys)
 sys.setdefaultencoding('utf8')
 
-class CommonCrawlFetcher:
+global logger
+logging.basicConfig( level=logging.INFO,format='%(asctime)s : %(levelname)s : %(message)s')
+logger = logging.getLogger(__name__)
 
 
-	def __init__(self, domain):
+def fetch_records(domain, index):
 
-		logging.basicConfig(filename='logging.log', level=logging.DEBUG,format='%(asctime)s : %(levelname)s : %(message)s')
-		self._logger = logging.getLogger(__name__)
-
-		self._domain = domain
-		self._index_list = [
-								"2013-20",
-								"2013-48",
-
-								"2014-10",
-								"2014-15",
-								"2014-23",
-								"2014-35",
-								"2014-41",
-								"2014-42",
-								"2014-49",
-								"2014-52",
-
-								"2015-06",
-								"2015-11",
-								"2015-14",
-								"2015-18",
-								"2015-22",
-								"2015-27",
-								"2015-32",
-								"2015-35",
-								"2015-40",
-								"2015-48",
-								"2016-07",	]
-
-		self._hits = self._search_domain()
-
-		self._curr_dir = 'data' + '/' + str(self._domain)
-		self._create_dirs()
+	logger.info("Fetching for target domain: %s" % domain)
 
 
-	def _search_domain(self):
+	logger.info("Fetching index %s" % index)
 
-		d = collections.OrderedDict()
-		record_list = d.fromkeys(self._index_list, [])
+	cc_url  = "http://index.commoncrawl.org/CC-MAIN-%s-index?" % index
+	cc_url 	+= "url=%s&matchType=domain&output=json" % domain
 
+	response = requests.get(cc_url)
 
-		self._logger.info("Fetching for target domain: %s" % self._domain)
+	record_list = []
+	keys = ['offset', 'length', 'filename']
 
-		for index in record_list:
+	if response.status_code == 200:
 
-			self._logger.info("Fetching index %s" % index)
+		records = response.content.splitlines()
+		for record in records:
+			curr_record_dict = json.loads(record)
+			new_record_dict = {}
 
-			cc_url  = "http://index.commoncrawl.org/CC-MAIN-%s-index?" % index
-			cc_url += "url=%s&matchType=domain&output=json" % self._domain
+			for key in keys:
+				new_record_dict[key] = curr_record_dict[key]
 
-			response = requests.get(cc_url)
-			total_records = 0
-			if response.status_code == 200:
+			record_list.append(new_record_dict)
 
-				records = response.content.splitlines()
-
-				for record in records:
-					record_list[index].append(json.loads(record))
-
-				self._logger.info("Added %d results." % len(records))
-				total_records += len(records)
-
-		self._logger.info("Found a total of %d hits." % len(record_list))
-		self._logger.info("Total records: %d" % total_records)
-
-		return record_list
+	return record_list
+	logger.info("for domain: %s and index: %s found a total of %d hits." % (domain,index,len(record_list)))
 
 
-	def _download_page(self, record):
+def download_page(record):
 
-		offset, length = int(record['offset']), int(record['length'])
-		offset_end = offset + length - 1
+	offset, length = int(record['offset']), int(record['length'])
+	offset_end = offset + length - 1
 
-		prefix = 'https://aws-publicdatasets.s3.amazonaws.com/'
-		resp = requests.get(prefix + record['filename'], headers={'Range': 'bytes={}-{}'.format(offset, offset_end)})
+	prefix = 'https://aws-publicdatasets.s3.amazonaws.com/'
+	resp = requests.get(prefix + record['filename'], headers={'Range': 'bytes={}-{}'.format(offset, offset_end)})
 
-		raw_data = StringIO.StringIO(resp.content)
-		f = gzip.GzipFile(fileobj=raw_data)
+	raw_data = StringIO.StringIO(resp.content)
+	f = gzip.GzipFile(fileobj=raw_data)
 
-		data = f.read()
+	data = f.read()
+	return data
 
-		response = ""
+def clean_warc(input):
 
-		if len(data):
-			return data
+	content = input.split('\n')
 
-	def _create_dirs(self):
 
-		if not os.path.exists('data'):
-			os.makedirs('data')
+	date = content[2].split(':')[1].strip()
+	url = content[9].split(':',1)[1].strip()
 
-		for index in self._hits:
-			curr = self._curr_dir +'/'+ str(index)
-			if not os.path.exists(curr):
-				os.makedirs(curr)
+	html = content[39:]
 
-	def run(self):
-		self._logger.info('Now Fetching WARC files')
-		for index, records in self._hits.iteritems():
+	html = '\n'.join(html).strip().decode('utf8')
 
-			for idx, record in enumerate(records):
+	h = html2text.HTML2Text()
+	h.ignore_links = True
+	text = h.handle(html)
+	text = re.sub('[^A-Za-z0-9\.]+', ' ', text)
 
-				content = self._download_page(record)
-				curr_file = self._curr_dir + '/' + str(index) + "/" + str(idx) + ".warc"
-
-				with open(curr_file, "w") as text_file:
-					text_file.write(content)
+	return text, date, url
 
 
 with open ('domains.txt', 'rb') as f:
 	domains = f.read().split('\n')
+with open ('indices.txt', 'rb') as f:
+	indices = f.read().split('\n')
 
 for domain in domains:
-	fetcher = CommonCrawlFetcher(domain)
-	fetcher.run()
 
+	meta_data = ''
+	domain_dir = 'data/' + domain
+	os.makedirs(domain_dir)
+
+	csv_file = open(domain_dir +'/meta_data.csv', 'w')
+
+	for index in indices:
+
+
+		index_dir = domain_dir +'/'+ str(index)
+		os.makedirs(index_dir)
+
+		records_list = fetch_records(domain, index)
+
+		for idx, record in enumerate(records_list):
+
+
+			warc_data = download_page(record)
+			text_data, date, url = clean_warc(warc_data)
+
+			csv_file.write('%s,%s,%s\n' % (index, url, date))
+			with open(index_dir + '/' + str(idx)  + '.text', "w") as text_file:
+				text_file.write(text_data)
+	csv_file.close()
