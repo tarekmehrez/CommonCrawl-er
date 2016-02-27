@@ -45,7 +45,9 @@ class CommonCrawlFetcher:
 								"2015-27",
 								"2015-32",
 								"2015-35",
-								"2015-40",	]
+								"2015-40"
+								"2015-48",
+								"2016-07",	]
 
 		self._hits = self._search_domain()
 
