@@ -118,7 +118,6 @@ with open ('domains.txt', 'rb') as f:
 	domains = f.read().split('\n')
 with open ('indices.txt', 'rb') as f:
 	indices = f.read().split('\n')
-run(indices)
 
 pool = ThreadPool(20)
 results = pool.map(run, indices)
