@@ -83,34 +83,47 @@ def clean_warc(input):
 
 	return text, date, url
 
-def run(indices):
+def run(index):
+
+
+	meta_data = ''
+	index_dir = 'data/' + index
+
+	csv_file = open(index_dir +'/meta_data.csv', 'w')
+
+	for domain in domains:
+
+
+		domain_dir = index_dir +'/'+ str(domain)
+
+		records_list = fetch_records(domain, index)
+
+		for idx, record in enumerate(records_list):
+
+
+			warc_data = download_page(record)
+			text_data, date, url = clean_warc(warc_data)
+
+			csv_file.write('%s,%s,%s\n' % (domain, url, date))
+			with open(domain_dir + '/' + str(idx)  + '.text', "w") as text_file:
+				text_file.write(text_data)
+	csv_file.close()
+
+def create_dirs(domains, indices):
 
 	for index in indices:
-
-		meta_data = ''
 		index_dir = 'data/' + index
-		os.makedirs(index_dir)
-
-		csv_file = open(index_dir +'/meta_data.csv', 'w')
+		if not os.path.exists(index_dir):
+			os.makedirs(index_dir)
 
 		for domain in domains:
 
-
 			domain_dir = index_dir +'/'+ str(domain)
-			os.makedirs(domain_dir)
 
-			records_list = fetch_records(domain, index)
-
-			for idx, record in enumerate(records_list):
+			if not os.path.exists(domain_dir):
+				os.makedirs(domain_dir)
 
 
-				warc_data = download_page(record)
-				text_data, date, url = clean_warc(warc_data)
-
-				csv_file.write('%s,%s,%s\n' % (domain, url, date))
-				with open(domain_dir + '/' + str(idx)  + '.text', "w") as text_file:
-					text_file.write(text_data)
-		csv_file.close()
 
 global domains
 
@@ -118,6 +131,9 @@ with open ('domains.txt', 'rb') as f:
 	domains = f.read().split('\n')
 with open ('indices.txt', 'rb') as f:
 	indices = f.read().split('\n')
+
+
+create_dirs(domains, indices)
 
 pool = ThreadPool(20)
 results = pool.map(run, indices)
