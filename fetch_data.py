@@ -8,6 +8,7 @@ import re
 import requests
 import sys
 import shutil
+import time
 
 from multiprocessing import Pool
 
@@ -117,6 +118,10 @@ for d in domains:
 
 create_dirs(data_arr)
 
-pool = Pool(20)
-esults = pool.imap(run, data_arr)
+pool = Pool(4)
+start = time.time()
+logger.info("Starting parallel processes with number of entries: %d" % len(data_arr))
+
+for idx, x in enumerate(pool.imap(run, data_arr)):
+	logger.info('elapsed time for domain-index pair number %d: %d' %(idx, int(time.time() - start)))
 
