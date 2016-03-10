@@ -9,7 +9,7 @@ import requests
 import sys
 import shutil
 
-from multiprocessing.dummy import Pool as ThreadPool
+from multiprocessing import Pool
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -117,6 +117,6 @@ for d in domains:
 
 create_dirs(data_arr)
 
-pool = ThreadPool(20)
-esults = pool.map(run, data_arr)
+pool = Pool(20)
+esults = pool.imap(run, data_arr)
 
