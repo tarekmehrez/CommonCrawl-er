@@ -1,13 +1,13 @@
-import requests
-import json
 import StringIO
 import gzip
 import html2text
-import collections
-import os
-import sys
+import json
 import logging
+import os
 import re
+import requests
+import sys
+import shutil
 
 from multiprocessing.dummy import Pool as ThreadPool
 
@@ -81,60 +81,42 @@ def clean_warc(input):
 	text = h.handle(html)
 	text = re.sub('[^A-Za-z0-9\.]+', ' ', text)
 
-	return text, date, url
+	result = '%s\n%s\n%s' % (text, date, url)
+	return result
 
-def run(index):
+def run(item):
 
+	domain = item[0]
+	index = item[1]
+	dir = 'data/%s-%s' %(domain, index)
+	records_list = fetch_records(domain, index)
+	for idx, record in enumerate(records_list):
+		warc_data = download_page(record)
+		text_file = clean_warc(warc_data)
+		with open('%s/%s.text' % (dir, str(idx)), 'wb') as f:
+			f.write(text_file)
 
-	meta_data = ''
-	index_dir = 'data/' + index
-
-	csv_file = open(index_dir +'/meta_data.csv', 'w')
-
-	for domain in domains:
-
-
-		domain_dir = index_dir +'/'+ str(domain)
-
-		records_list = fetch_records(domain, index)
-
-		for idx, record in enumerate(records_list):
-
-
-			warc_data = download_page(record)
-			text_data, date, url = clean_warc(warc_data)
-
-			csv_file.write('%s,%s,%s\n' % (domain, url, date))
-			with open(domain_dir + '/' + str(idx)  + '.text', "w") as text_file:
-				text_file.write(text_data)
-	csv_file.close()
-
-def create_dirs(domains, indices):
-
-	for index in indices:
-		index_dir = 'data/' + index
-		if not os.path.exists(index_dir):
-			os.makedirs(index_dir)
-
-		for domain in domains:
-
-			domain_dir = index_dir +'/'+ str(domain)
-
-			if not os.path.exists(domain_dir):
-				os.makedirs(domain_dir)
+def create_dirs(data):
+	if os.path.exists('data'):
+		shutil.rmtree('data')
+	os.makedirs('data')
+	for d in data:
+		os.makedirs('data/%s-%s' % (d[0],d[1]))
 
 
-
-global domains
+data_arr = []
 
 with open ('domains.txt', 'rb') as f:
 	domains = f.read().split('\n')
 with open ('indices.txt', 'rb') as f:
 	indices = f.read().split('\n')
 
+for d in domains:
+	for i in indices:
+		data_arr.append([d,i])
 
-create_dirs(domains, indices)
+create_dirs(data_arr)
 
 pool = ThreadPool(20)
-results = pool.map(run, indices)
+esults = pool.map(run, data_arr)
 
