@@ -2,7 +2,6 @@ import StringIO
 import gzip
 import html2text
 import json
-import logging
 import os
 import re
 import requests
@@ -15,17 +14,10 @@ from multiprocessing import Pool
 reload(sys)
 sys.setdefaultencoding('utf8')
 
-global logger
-logging.basicConfig(filename='logging.log', level=logging.INFO,format='%(asctime)s : %(levelname)s : %(message)s')
-logger = logging.getLogger(__name__)
-
 
 def fetch_records(domain, index):
 
-	logger.info("Fetching for target domain: %s" % domain)
-
-
-	logger.info("Fetching index %s" % index)
+	print "Fetching for target domain: %s, and index %s" % (domain, index)
 
 	cc_url  = "http://index.commoncrawl.org/CC-MAIN-%s-index?" % index
 	cc_url 	+= "url=%s&matchType=domain&output=json" % domain
@@ -47,8 +39,8 @@ def fetch_records(domain, index):
 
 			record_list.append(new_record_dict)
 
+	print "for domain: %s and index: %s found a total of %d hits." % (domain,index,len(record_list))
 	return record_list
-	logger.info("for domain: %s and index: %s found a total of %d hits." % (domain,index,len(record_list)))
 
 
 def download_page(record):
@@ -91,11 +83,10 @@ def run(item):
 	index = item[1]
 	dir = 'data/%s-%s' %(domain, index)
 	records_list = fetch_records(domain, index)
-	for idx, record in enumerate(records_list):
+	for idx, record in enumerate(records_list[:5]):
 		warc_data = download_page(record)
-		text_file = clean_warc(warc_data)
 		with open('%s/%s.text' % (dir, str(idx)), 'wb') as f:
-			f.write(text_file)
+			f.write(warc_data)
 
 def create_dirs(data):
 	if os.path.exists('data'):
@@ -104,6 +95,7 @@ def create_dirs(data):
 	for d in data:
 		os.makedirs('data/%s-%s' % (d[0],d[1]))
 
+print 'reading in indices and domains'
 
 data_arr = []
 
@@ -116,12 +108,15 @@ for d in domains:
 	for i in indices:
 		data_arr.append([d,i])
 
-create_dirs(data_arr)
 
-pool = Pool(4)
+print 'creating data directories'
+
+create_dirs(data_arr)
+print len(data_arr)
+pool = Pool(2)
 start = time.time()
-logger.info("Starting parallel processes with number of entries: %d" % len(data_arr))
+print "Starting parallel processes with number of entries: %d" % len(data_arr)
 
 for idx, x in enumerate(pool.imap(run, data_arr)):
-	logger.info('elapsed time for domain-index pair number %d: %d' %(idx, int(time.time() - start)))
+	print 'elapsed time for domain-index pair number %d: %d' %(idx, int(time.time() - start))
 
