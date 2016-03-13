@@ -8,6 +8,7 @@ import requests
 import sys
 import shutil
 import time
+import argparse
 
 from multiprocessing import Pool
 
@@ -83,7 +84,12 @@ def run(item):
 	index = item[1]
 	dir = 'data/%s-%s' %(domain, index)
 	records_list = fetch_records(domain, index)
-	for idx, record in enumerate(records_list[:5]):
+
+	if not records_list:
+		print 'no records found for %s' % dir
+		shutil.rmtree(dir)
+
+	for idx, record in enumerate(records_list):
 		warc_data = download_page(record)
 		with open('%s/%s.text' % (dir, str(idx)), 'wb') as f:
 			f.write(warc_data)
@@ -109,11 +115,21 @@ for d in domains:
 		data_arr.append([d,i])
 
 
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-p','--pools', action='store', dest='num_pools', help='Number of pools', type=int)
+args = parser.parse_args()
+
+if not args.num_pools:
+	print '-p required'
+	parser.print_help()
+	sys.exit()
+
 print 'creating data directories'
 
 create_dirs(data_arr)
 print len(data_arr)
-pool = Pool(2)
+pool = Pool(args.num_pools)
 start = time.time()
 print "Starting parallel processes with number of entries: %d" % len(data_arr)
 
